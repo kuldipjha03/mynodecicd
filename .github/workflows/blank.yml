@@ -1,0 +1,43 @@
+name: Node.js CI/CD to EC2
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Clean remote target directory
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.REMOTE_HOST }}
+        username: ${{ secrets.REMOTE_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          sudo rm -rf /var/www/mynodecicd/*
+    - name: Deploy to EC2 (respect .scpignore)
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.REMOTE_HOST }}
+        username: ${{ secrets.REMOTE_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        source: "."
+        target: "/var/www/mynodecicd"
+        strip_components: 0
+
+    - name: Install dependencies & restart with PM2
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.REMOTE_HOST }}
+        username: ${{ secrets.REMOTE_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd /var/www/mynodecicd
+          npm install --production
+          pm2 restart ecosystem.config.js || pm2 start ecosystem.config.js
+          pm2 save
